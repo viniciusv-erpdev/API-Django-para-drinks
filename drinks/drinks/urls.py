@@ -18,11 +18,18 @@ from django.contrib import admin
 from django.urls import path
 from drinks import views
 from rest_framework.urlpatterns import format_suffix_patterns
+from django.conf import settings
+from django.conf.urls.static import static
+from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('drinks/', views.drink_list),
-    path('drinks/<int:id>', views.drink_detail)
+    path('drinks/<int:id>', views.drink_detail),
+    path('testpage/', views.test_page, name='testpage')
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

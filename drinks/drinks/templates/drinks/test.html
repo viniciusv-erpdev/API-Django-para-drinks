@@ -1,0 +1,210 @@
+<!-- templates/drinks/test.html -->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Teste API de Drinks</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
+    .drink { border:1px solid #ddd; padding:10px; margin-bottom:10px; display:flex; gap:10px; align-items:center; }
+    img.thumb { height:80px; object-fit:cover; border-radius:6px; }
+    form { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+    input[type="text"], textarea, select { padding:6px; width:100%; box-sizing:border-box; }
+    button { padding:8px 12px; cursor:pointer; }
+    .actions { margin-left:auto; display:flex; gap:6px; }
+  </style>
+</head>
+<body>
+  <h1>Teste API de Drinks</h1>
+
+  <section>
+    <h2>Criar / Editar Drink</h2>
+    <form id="drink-form">
+      <input type="hidden" id="drink-id" value="">
+      <label>Nome: <input type="text" id="nome" required></label>
+      <label>Descrição: <textarea id="descricao" rows="3"></textarea></label>
+      <label>Dificuldade:
+        <select id="dificuldade">
+          <option value="F">Fácil</option>
+          <option value="M">Médio</option>
+          <option value="D">Difícil</option>
+        </select>
+      </label>
+      <label>Ingredientes (vírgula separado): <input type="text" id="ingredientes"></label>
+      <label>Imagem: <input type="file" id="imagem" accept="image/*"></label>
+
+      <div>
+        <button type="submit" id="submit-btn">Criar</button>
+        <button type="button" id="cancel-edit" style="display:none">Cancelar edição</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Lista de Drinks</h2>
+    <div id="drinks-list">Carregando...</div>
+  </section>
+
+<script>
+/* ---------- CONFIG ---------- */
+const baseUrl = '/api/drinks/'; // altere se seu endpoint for diferente
+// ---------- helpers ----------
+function getCookie(name) {
+  // pega cookie (usado para CSRF)
+  const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return v ? v.pop() : '';
+}
+const csrftoken = getCookie('csrftoken');
+
+function showError(msg){ alert(msg); }
+
+/* ---------- UI / Fetch ---------- */
+async function loadDrinks(){
+  const list = document.getElementById('drinks-list');
+  list.innerHTML = 'Carregando...';
+  try {
+    const res = await fetch(baseUrl, { credentials: 'same-origin' });
+    if(!res.ok) throw new Error('Erro ao carregar');
+    const data = await res.json();
+    if(data.length === 0) { list.innerHTML = '<em>Nenhum drink cadastrado</em>'; return; }
+
+    list.innerHTML = '';
+    data.forEach(d => {
+      const div = document.createElement('div');
+      div.className = 'drink';
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.alt = d.nome || 'sem imagem';
+      img.src = d.imagem_url || d.imagem || ''; // usa imagem_url se disponível
+      img.onerror = () => img.style.display = 'none';
+
+      const info = document.createElement('div');
+      info.innerHTML = `<strong>${escapeHtml(d.nome)}</strong><br>
+                        <small>${escapeHtml(d.descricao || '')}</small><br>
+                        <small>Dificuldade: ${escapeHtml(d.dificuldade || '')} • Ingredientes: ${escapeHtml(d.ingredientes || '')}</small>`;
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Editar';
+      editBtn.onclick = () => populateFormForEdit(d);
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Deletar';
+      delBtn.onclick = () => deleteDrink(d.id);
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      div.appendChild(img);
+      div.appendChild(info);
+      div.appendChild(actions);
+
+      list.appendChild(div);
+    });
+  } catch (err) {
+    list.innerHTML = '<span style="color:red">Erro ao carregar drinks</span>';
+    console.error(err);
+  }
+}
+
+function escapeHtml(unsafe) {
+  if(!unsafe) return '';
+  return unsafe.replace(/[&<"'>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}[c]));
+}
+
+/* populate form to edit */
+function populateFormForEdit(d){
+  document.getElementById('drink-id').value = d.id;
+  document.getElementById('nome').value = d.nome || '';
+  document.getElementById('descricao').value = d.descricao || '';
+  document.getElementById('dificuldade').value = d.dificuldade || 'F';
+  document.getElementById('ingredientes').value = d.ingredientes || '';
+  document.getElementById('submit-btn').textContent = 'Salvar alterações';
+  document.getElementById('cancel-edit').style.display = 'inline-block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('cancel-edit').addEventListener('click', () => {
+  document.getElementById('drink-id').value = '';
+  document.getElementById('drink-form').reset();
+  document.getElementById('submit-btn').textContent = 'Criar';
+  document.getElementById('cancel-edit').style.display = 'none';
+});
+
+/* create or update */
+document.getElementById('drink-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const id = document.getElementById('drink-id').value;
+  const nome = document.getElementById('nome').value.trim();
+  const descricao = document.getElementById('descricao').value.trim();
+  const dificuldade = document.getElementById('dificuldade').value;
+  const ingredientes = document.getElementById('ingredientes').value.trim();
+  const imagemInput = document.getElementById('imagem');
+  const file = imagemInput.files[0];
+
+  if(!nome){ showError('Nome é obrigatório'); return; }
+
+  const form = new FormData();
+  form.append('nome', nome);
+  form.append('descricao', descricao);
+  form.append('dificuldade', dificuldade);
+  form.append('ingredientes', ingredientes);
+  if(file) form.append('imagem', file);
+
+  try {
+    const url = id ? (baseUrl + id + '/') : baseUrl;
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      body: form,
+      credentials: 'same-origin',
+      headers: {
+        'X-CSRFToken': csrftoken  // importa para POST/PUT/DELETE
+      }
+    });
+    if (res.status === 400) {
+      const err = await res.json();
+      console.error(err);
+      showError('Erro de validação: ' + JSON.stringify(err));
+      return;
+    }
+    if (!res.ok) throw new Error('Erro na requisição');
+    const data = await res.json();
+    // reset form e recarregar lista
+    document.getElementById('drink-form').reset();
+    document.getElementById('drink-id').value = '';
+    document.getElementById('submit-btn').textContent = 'Criar';
+    document.getElementById('cancel-edit').style.display = 'none';
+    loadDrinks();
+  } catch (err) {
+    console.error(err);
+    showError('Falha ao enviar. Veja console.');
+  }
+});
+
+/* delete */
+async function deleteDrink(id){
+  if(!confirm('Confirma exclusão?')) return;
+  try {
+    const res = await fetch(baseUrl + id + '/', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {'X-CSRFToken': csrftoken}
+    });
+    if (res.status === 204) {
+      loadDrinks();
+    } else {
+      showError('Erro ao deletar (ver console).');
+      console.error(await res.text());
+    }
+  } catch (err) {
+    console.error(err);
+    showError('Erro ao deletar.');
+  }
+}
+
+/* init */
+loadDrinks();
+</script>
+</body>
+</html>
