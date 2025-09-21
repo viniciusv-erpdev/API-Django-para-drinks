@@ -1,25 +1,39 @@
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import MultiPartParser, FormParser
+# seu_app/views.py
+from django.shortcuts import render
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
+
 from .models import Drink
 from .serializers import DrinkSerializer
-from django.shortcuts import render
+
+# =========================
+# Página HTML de teste
+# =========================
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+@ensure_csrf_cookie
+def test_page(request):
+    """
+    Renderiza a página HTML que consome a API de drinks.
+    """
+    return render(request, 'drinks/test.html')
+
+
+# =========================
+# API: lista e criação
+# =========================
 @api_view(['GET', 'POST'])
-@parser_classes([MultiPartParser, FormParser])
 def drink_list(request, format=None):
-    """
-    GET: lista todos os drinks
-    POST: cria novo drink (aceita imagem via multipart/form-data)
-    """
     if request.method == 'GET':
         drinks = Drink.objects.all()
         serializer = DrinkSerializer(drinks, many=True, context={'request': request})
         return Response(serializer.data)
 
-    elif request.method == 'POST':
+    if request.method == 'POST':
+        # parser para lidar com arquivos
+        parser_classes = [MultiPartParser, FormParser]
         serializer = DrinkSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
@@ -27,14 +41,11 @@ def drink_list(request, format=None):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# =========================
+# API: detalhe, atualização e deleção
+# =========================
 @api_view(['GET', 'PUT', 'DELETE'])
-@parser_classes([MultiPartParser, FormParser])
 def drink_detail(request, id, format=None):
-    """
-    GET: retorna um drink
-    PUT: atualiza (aceita imagem via multipart/form-data)
-    DELETE: deleta
-    """
     try:
         drink = Drink.objects.get(pk=id)
     except Drink.DoesNotExist:
@@ -45,7 +56,7 @@ def drink_detail(request, id, format=None):
         return Response(serializer.data)
 
     elif request.method == 'PUT':
-        serializer = DrinkSerializer(drink, data=request.data, partial=False, context={'request': request})
+        serializer = DrinkSerializer(drink, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -54,7 +65,3 @@ def drink_detail(request, id, format=None):
     elif request.method == 'DELETE':
         drink.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-@ensure_csrf_cookie
-def test_page(request):
-    return render(request, 'drinks/test.html')
